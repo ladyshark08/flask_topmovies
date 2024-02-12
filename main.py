@@ -7,8 +7,14 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, FloatField
 from wtforms.validators import DataRequired
 import requests
+import os
 
 API_KEY = "edfaa1fe154f60eaf7a2e37215895717"
+
+headers = {
+    "accept": "application/json",
+    "Authorization": os.environ.get("TOKEN")
+}
 
 '''
 Red underlines? Install the required packages first: 
@@ -63,34 +69,47 @@ class AddMovie(FlaskForm):
     add_movie = SubmitField('Add Movie')
 
 
+def update_ranking():
+    result = db.session.execute(db.select(Movies).order_by(Movies.rating))
+    all_movies = result.scalars()
+    rows = db.session.query(Movies).count()
+    for movie in all_movies:
+        movie.ranking = rows
+        rows -= 1
+    db.session.commit()
+
+
 @app.route("/")
 def home():
-    result = db.session.execute(db.select(Movies).order_by(Movies.ranking))
-    all_movies = result.scalars()
-    # second_session = db.session.execute(db.select(Book).order_by(Book.title))
-    # second_all_bs = second_session.scalars()
+    with app.app_context():
+        update_ranking()
+        result = db.session.execute(db.select(Movies).order_by(Movies.rating))
+        all_movies = result.scalars()
+        second_session = db.session.execute(db.select(Movies).order_by(Movies.rating))
+        second_all_bs = second_session.scalars()
+        return render_template("index.html", movies=all_movies, movies_2=second_all_bs)
 
-    return render_template("index.html", movies=all_movies)
 
-
-@app.route("/edit/<int:movie_id>", methods=['POST', 'GET'])
-def update(movie_id):
+@app.route("/edit", methods=['POST', 'GET'])
+def update():
     form = UpdateForm()
+    code = request.args.get('code')
     if request.method == "POST" and form.validate_on_submit():
         new_rating = request.form.get("new_rating")
         new_review = request.form.get("your_review")
-        movie_to_update = db.session.execute(db.select(Movies).where(Movies.id == movie_id)).scalar()
+        movie_to_update = db.session.execute(db.select(Movies).where(Movies.id == code)).scalar()
         movie_to_update.rating = new_rating
         movie_to_update.review = new_review
         db.session.commit()
         return redirect('/')
 
-    movie = db.session.execute(db.select(Movies).where(Movies.id == movie_id)).scalar()
+    movie = db.session.execute(db.select(Movies).where(Movies.id == code)).scalar()
     return render_template("edit.html", movie=movie, form=form)
 
 
-@app.route('/delete/<int:movie_id>', methods=["POST", "GET"])
-def delete_movie(movie_id):
+@app.route('/delete', methods=["POST", "GET"])
+def delete_movie():
+    movie_id = request.args.get('movie_id')
     movie_to_delete = db.get_or_404(Movies, movie_id)
     db.session.delete(movie_to_delete)
     db.session.commit()
@@ -104,17 +123,37 @@ def add_movie():
         name = request.form.get('movie_title')
         url = f"https://api.themoviedb.org/3/search/movie?query={name}&include_adult=false&language=en-US&page=1"
 
-        headers = {
-            "accept": "application/json",
-            "Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9"
-                             ".eyJhdWQiOiJlZGZhYTFmZTE1NGY2MGVhZjdhMmUzNzIxNTg5NTcxNyIsInN1YiI6IjY1YzZhNWI0YjZjZmYxMDE2NGE0MmEyNyIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.l6aTkcWI81-J81naWrXdYWAVR-FYnnonicTAsW6rXXg"
-        }
-
         response = requests.get(url, headers=headers)
         result = response.json()
-        print(result["results"])
+        result_processed = (result["results"])
+        return render_template('select.html', movies=result_processed)
 
     return render_template('add.html', form=form)
+
+
+@app.route("/select/<int:movie_id>")
+def select_movie(movie_id):
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}?language=en-US"
+    response = requests.get(url, headers=headers)
+    result = response.json()
+    url = result['poster_path']
+    release_date = result['release_date'].split("-")
+    year = release_date[0]
+    title = result['original_title']
+    new_movie = Movies(
+        title=result['original_title'],
+        img_url=f'https://image.tmdb.org/t/p/w500{url}',
+        year=year,
+        description=result['overview'],
+        rating=0,
+        ranking=0,
+        review="not reviewed yet"
+    )
+    db.session.add(new_movie)
+    db.session.commit()
+    movie = db.session.execute(db.select(Movies).where(Movies.title == title)).scalar()
+    tid = movie.id
+    return redirect(url_for('update', code=tid))
 
 
 if __name__ == '__main__':
