@@ -6,7 +6,7 @@
 <div class="container">
   <h1 class="heading">My Top 10 Movies</h1>
   <p class="description">These are my all-time favourite movies.</p>
-    {% if movies.first() != None %}
+    {% if movies_2.first() != None %}
    {% for movie in movies %}
 
   <div class="card" >
@@ -25,7 +25,7 @@
             {{movie.description}}
         </p>
 
-        <a href="{{url_for('update', movie_id=movie.id)}}" class="button">Update</a>
+        <a href="{{url_for('update', code=movie.id)}}" class="button">Update</a>
         <a href="{{url_for('delete_movie', movie_id=movie.id)}}" class="button delete-button">Delete</a>
 
       </div>
