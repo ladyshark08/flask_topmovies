@@ -131,8 +131,9 @@ def add_movie():
     return render_template('add.html', form=form)
 
 
-@app.route("/select/<int:movie_id>")
-def select_movie(movie_id):
+@app.route("/select")
+def select_movie():
+    movie_id = request.args.get('movie_id')
     url = f"https://api.themoviedb.org/3/movie/{movie_id}?language=en-US"
     response = requests.get(url, headers=headers)
     result = response.json()
@@ -154,7 +155,6 @@ def select_movie(movie_id):
     movie = db.session.execute(db.select(Movies).where(Movies.title == title)).scalar()
     tid = movie.id
     return redirect(url_for('update', code=tid))
-
 
 if __name__ == '__main__':
     app.run(debug=True)
